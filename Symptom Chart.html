@@ -1,0 +1,986 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Symptom Chart</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one clinical worksheet in three steps (patient, symptoms + history, assessment). Condensed headings read like chart labels; mono carries scores and vitals. */
+:root{
+  --bg:#EEF3F4;
+  --surface:#FFFFFF;
+  --surface-2:#E3ECEE;
+  --fg:#12262D;
+  --muted:#51656C;
+  --line:#CBD9DC;
+  --accent:#0B6E78;
+  --accent-ink:#FFFFFF;
+  --accent-soft:#D3EBEE;
+  --good:#1F7A3E;
+  --warn:#9A5B00;
+  --warn-soft:#FBEBCB;
+  --crit:#B3261E;
+  --crit-soft:#FADBD8;
+  --font-display:"IBM Plex Sans Condensed","Arial Narrow",Arial,sans-serif;
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1B20;--surface:#14262C;--surface-2:#1B3239;--fg:#E4EEF0;--muted:#97AEB5;--line:#2B444C;
+    --accent:#52C2CC;--accent-ink:#06262B;--accent-soft:#17424A;
+    --good:#6FD08C;--warn:#F0B454;--warn-soft:#3A2D12;--crit:#FF8A80;--crit-soft:#41191A;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1B20;--surface:#14262C;--surface-2:#1B3239;--fg:#E4EEF0;--muted:#97AEB5;--line:#2B444C;
+  --accent:#52C2CC;--accent-ink:#06262B;--accent-soft:#17424A;
+  --good:#6FD08C;--warn:#F0B454;--warn-soft:#3A2D12;--crit:#FF8A80;--crit-soft:#41191A;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:15px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 48px}
+.wrap{max-width:1040px;margin:0 auto}
+h1,h2,h3,h4{font-family:var(--font-display);margin:0;line-height:1.15;text-wrap:balance}
+h2{font-size:1.5rem;letter-spacing:.005em}
+h3{font-size:1.1rem}
+p{margin:0}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.eyebrow{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+
+/* top bar */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:18px 0 14px}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand b{font-family:var(--font-display);font-size:1.45rem;font-weight:700}
+.brand span{color:var(--muted);font-size:.85rem}
+.emerg{font-size:.82rem;background:var(--crit-soft);color:var(--crit);border-radius:4px;padding:6px 10px;font-weight:600}
+.notice{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:10px 14px;font-size:.86rem;color:var(--muted);margin-bottom:18px}
+.notice strong{color:var(--fg)}
+
+/* stepper */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:20px;padding:0;list-style:none}
+.steps li{border-top:3px solid var(--line);padding-top:8px;font-size:.84rem;color:var(--muted);min-width:0}
+.steps li b{display:block;font-family:var(--font-display);font-size:1rem;color:var(--fg)}
+.steps li.on{border-color:var(--accent)}
+.steps li.done{border-color:var(--good)}
+
+/* panels */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:22px}
+.panel + .panel{margin-top:16px}
+.panel-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.panel-head p{color:var(--muted);font-size:.88rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px 16px}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.field label,.lbl{font-size:.78rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.field .hint{font-size:.76rem;color:var(--muted)}
+input[type=text],input[type=tel],input[type=email],input[type=number],select,textarea{
+  font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:9px 10px;width:100%;min-width:0}
+textarea{min-height:76px;resize:vertical}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible,.chip input:focus-visible + span{outline:2px solid var(--accent);outline-offset:2px}
+.err{color:var(--crit);font-size:.78rem;min-height:1em}
+.field.bad input,.field.bad select{border-color:var(--crit)}
+
+/* chips */
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{position:relative}
+.chip input{position:absolute;opacity:0;inset:0;cursor:pointer;margin:0}
+.chip span{display:inline-block;border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:5px 12px;font-size:.86rem;cursor:pointer;user-select:none}
+.chip input:checked + span{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.chip.hist input:checked + span{background:var(--fg);border-color:var(--fg);color:var(--bg)}
+.two{display:grid;grid-template-columns:1.25fr 1fr;gap:22px}
+.two > *{min-width:0}
+.sub{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+.count{font-family:var(--font-mono);font-size:.8rem;color:var(--muted)}
+.vitals{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px}
+.range{display:flex;align-items:center;gap:10px}
+.range input{flex:1;accent-color:var(--accent)}
+.range output{font-family:var(--font-mono);min-width:3ch;text-align:right}
+
+/* buttons */
+.bar{display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-top:20px}
+.bar > div{display:flex;gap:10px;flex-wrap:wrap}
+button{font:inherit;font-weight:600;border-radius:5px;padding:10px 18px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button.ghost{background:transparent;color:var(--muted);font-weight:500}
+button:hover{filter:brightness(.96)}
+
+/* results */
+.alert{border-radius:8px;padding:16px 18px;margin-bottom:16px;border:1px solid}
+.alert.crit{background:var(--crit-soft);border-color:var(--crit);color:var(--fg)}
+.alert.crit h3{color:var(--crit)}
+.alert.warn{background:var(--warn-soft);border-color:var(--warn)}
+.alert ul{margin:8px 0 0;padding-left:20px}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:16px}
+.summary > div{border:1px solid var(--line);border-radius:6px;padding:12px 14px;background:var(--bg);min-width:0}
+.summary .v{font-family:var(--font-display);font-size:1.1rem;font-weight:600;word-wrap:break-word}
+.link-box{background:var(--accent-soft);border-radius:6px;padding:14px 16px;margin-bottom:16px}
+.link-box ul{margin:6px 0 0;padding-left:20px}
+.dx{border:1px solid var(--line);border-radius:8px;background:var(--surface);overflow:hidden}
+.dx + .dx{margin-top:12px}
+.dx > summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;padding:14px 16px}
+.dx > summary::-webkit-details-marker{display:none}
+.rank{font-family:var(--font-mono);color:var(--muted);font-size:.9rem}
+.dx-name{min-width:0}
+.dx-name h3{margin-bottom:3px}
+.tags{display:flex;gap:6px;flex-wrap:wrap}
+.tag{font-size:.72rem;font-weight:600;border-radius:3px;padding:2px 7px;background:var(--surface-2);color:var(--muted);letter-spacing:.03em}
+.tag.hist{background:var(--fg);color:var(--bg)}
+.tag.u-high{background:var(--crit-soft);color:var(--crit)}
+.tag.u-mid{background:var(--warn-soft);color:var(--warn)}
+.tag.u-low{background:var(--accent-soft);color:var(--accent)}
+.score{width:120px;text-align:right}
+.score .n{font-family:var(--font-mono);font-size:1.15rem;font-weight:500}
+.meter{height:6px;background:var(--surface-2);border-radius:3px;margin-top:4px;overflow:hidden}
+.meter i{display:block;height:100%;background:var(--accent)}
+.dx-body{padding:4px 18px 18px;border-top:1px solid var(--line);display:grid;gap:16px}
+.dx-body h4{font-size:.78rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;font-family:var(--font-body);font-weight:600}
+.dx-body ul{margin:0;padding-left:20px}
+.dx-body li + li{margin-top:3px}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+.cols > *{min-width:0}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.fine{font-size:.8rem;color:var(--muted)}
+.reports{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.reports > div{border:1px solid var(--line);border-radius:6px;padding:12px 14px;background:var(--bg)}
+.reports b{display:block;margin-bottom:2px}
+.sample{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:var(--warn-soft);border:1px solid var(--warn);border-radius:6px;padding:9px 14px;margin-bottom:16px;font-size:.86rem}
+.sample button{padding:6px 12px;font-size:.84rem}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:5px;font-size:.88rem;z-index:5}
+.toast[hidden]{display:none}
+@media (max-width:760px){
+  .two{grid-template-columns:1fr}
+  .dx > summary{grid-template-columns:auto 1fr}
+  .score{grid-column:1 / -1;width:auto;text-align:left;display:flex;align-items:center;gap:12px}
+  .score .meter{flex:1;margin:0}
+  .panel{padding:16px}
+}
+@media (prefers-reduced-motion:no-preference){.meter i{transition:width .5s ease}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><b>Symptom Chart</b><span>history-aware symptom checker</span></div>
+    <div class="emerg">Emergency in India: call 112 or ambulance 108</div>
+  </header>
+  <p class="notice"><strong>Decision support only.</strong> This tool compares symptoms with past conditions using a built-in rule set. It cannot examine a patient, and it does not replace a doctor. Medicines listed are classes to discuss with a licensed clinician, never a prescription. Everything stays in this browser tab; nothing is uploaded.</p>
+
+  <ol class="steps" id="steps">
+    <li class="on"><b>1. Patient</b>Contact details</li>
+    <li><b>2. Symptoms and history</b>What is happening, what came before</li>
+    <li><b>3. Assessment</b>Likely causes, tests, care</li>
+  </ol>
+
+  <div class="sample" id="sampleBar">
+    <span><strong>Example case loaded.</strong> A fictional patient with diabetes, so you can see how the checker works. Replace it with a real patient.</span>
+    <button type="button" id="clearBtn">Clear form</button>
+  </div>
+
+  <!-- STEP 1 -->
+  <section id="step1" class="panel">
+    <div class="panel-head"><h2>Patient details</h2><p>Fields marked * are required</p></div>
+    <form id="patientForm" novalidate>
+      <div class="grid">
+        <div class="field"><label for="pName">Full name *</label><input type="text" id="pName" autocomplete="off"><div class="err" data-for="pName"></div></div>
+        <div class="field"><label for="pAge">Age (years) *</label><input type="number" id="pAge" min="0" max="120" inputmode="numeric"><div class="err" data-for="pAge"></div></div>
+        <div class="field"><label for="pSex">Sex *</label>
+          <select id="pSex"><option value="">Select</option><option>Female</option><option>Male</option><option>Other</option></select><div class="err" data-for="pSex"></div></div>
+        <div class="field"><label for="pPhone">Phone *</label><input type="tel" id="pPhone" inputmode="tel" placeholder="10-digit mobile"><div class="err" data-for="pPhone"></div></div>
+        <div class="field"><label for="pEmail">Email</label><input type="email" id="pEmail"><div class="err" data-for="pEmail"></div></div>
+        <div class="field"><label for="pCity">City / village</label><input type="text" id="pCity"></div>
+        <div class="field"><label for="pWt">Weight (kg)</label><input type="number" id="pWt" min="1" max="300" inputmode="decimal"></div>
+        <div class="field"><label for="pHt">Height (cm)</label><input type="number" id="pHt" min="30" max="250" inputmode="decimal"></div>
+        <div class="field"><label for="pEmName">Emergency contact name</label><input type="text" id="pEmName"></div>
+        <div class="field"><label for="pEmPhone">Emergency contact phone</label><input type="tel" id="pEmPhone" inputmode="tel"></div>
+      </div>
+      <div class="bar"><span class="fine">Weight and height are used to work out BMI.</span><div><button type="submit" class="primary">Next: symptoms</button></div></div>
+    </form>
+  </section>
+
+  <!-- STEP 2 -->
+  <section id="step2" hidden>
+    <div class="panel">
+      <div class="panel-head"><h2>Symptoms</h2><p id="who" class="mono"></p></div>
+      <div class="two">
+        <div>
+          <div class="sub"><label class="lbl" for="symSearch">Select every symptom the patient has</label><span class="count" id="symCount">0 selected</span></div>
+          <input type="text" id="symSearch" placeholder="Filter symptoms, e.g. leg, thirst, fever" autocomplete="off" style="margin-bottom:10px">
+          <div class="chips" id="symChips"></div>
+        </div>
+        <div>
+          <div class="field"><label for="duration">How long?</label>
+            <select id="duration"><option value="1">Less than 2 days</option><option value="2">2 to 7 days</option><option value="3" selected>1 to 4 weeks</option><option value="4">1 to 3 months</option><option value="5">More than 3 months</option></select></div>
+          <div class="field" style="margin-top:14px"><label for="severity">Severity (1 mild, 10 worst)</label>
+            <div class="range"><input type="range" id="severity" min="1" max="10" value="5"><output id="sevOut" for="severity">5</output></div></div>
+          <div class="field" style="margin-top:14px"><label for="otherSym">Other symptoms, in the patient's words</label>
+            <textarea id="otherSym" placeholder="Example: pain in the calf when walking, worse at night"></textarea>
+            <span class="hint">Known words here are picked up automatically.</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Medical history</h2><p>Past and ongoing conditions drive the cross-check</p></div>
+      <div class="sub"><span class="lbl">Past or current conditions</span><span class="count" id="histCount">0 selected</span></div>
+      <div class="chips" id="histChips"></div>
+      <div class="grid" style="margin-top:16px">
+        <div class="field"><label for="meds">Current medicines</label><textarea id="meds" placeholder="Name and strength if known, e.g. Metformin 500 mg"></textarea></div>
+        <div class="field"><label for="allergies">Allergies</label><textarea id="allergies" placeholder="Drug, food or other allergies"></textarea></div>
+        <div class="field"><label for="otherHist">Other history, surgeries, family history</label><textarea id="otherHist"></textarea></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Readings</h2><p>Optional, but they sharpen the result</p></div>
+      <div class="vitals">
+        <div class="field"><label for="vTemp">Temp (°F)</label><input type="number" id="vTemp" step="0.1" inputmode="decimal"></div>
+        <div class="field"><label for="vSys">BP systolic</label><input type="number" id="vSys" inputmode="numeric"></div>
+        <div class="field"><label for="vDia">BP diastolic</label><input type="number" id="vDia" inputmode="numeric"></div>
+        <div class="field"><label for="vPulse">Pulse /min</label><input type="number" id="vPulse" inputmode="numeric"></div>
+        <div class="field"><label for="vSpo2">SpO₂ %</label><input type="number" id="vSpo2" inputmode="numeric"></div>
+        <div class="field"><label for="vGlu">Blood sugar mg/dL</label><input type="number" id="vGlu" inputmode="numeric"></div>
+      </div>
+      <div class="bar"><button type="button" id="back1" class="ghost">Back</button><div><button type="button" id="analyze" class="primary">Check symptoms against history</button></div></div>
+    </div>
+  </section>
+
+  <!-- STEP 3 -->
+  <section id="step3" hidden>
+    <div id="results"></div>
+    <div class="bar"><button type="button" id="back2" class="ghost">Edit symptoms</button><div><button type="button" id="copyBtn">Copy report</button><button type="button" id="newBtn" class="primary">New patient</button></div></div>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+<script>
+"use strict";
+/* ---------- Knowledge base (educational rule set, not a clinical guideline) ---------- */
+var SYMPTOMS = [
+  {id:"fever",label:"Fever",kw:["fever","temperature","chills"]},
+  {id:"cough",label:"Cough",kw:["cough"]},
+  {id:"sore",label:"Sore throat",kw:["sore throat","throat pain"]},
+  {id:"runny",label:"Runny or blocked nose",kw:["runny nose","blocked nose","sneez"]},
+  {id:"breath",label:"Shortness of breath",kw:["breathless","short of breath","shortness of breath","breathing"]},
+  {id:"wheeze",label:"Wheezing",kw:["wheez"]},
+  {id:"chesttight",label:"Chest tightness",kw:["chest tight"]},
+  {id:"chest",label:"Chest pain",kw:["chest pain","chest discomfort"]},
+  {id:"palp",label:"Palpitations",kw:["palpitation","racing heart","heart racing"]},
+  {id:"head",label:"Headache",kw:["headache","head ache"]},
+  {id:"dizzy",label:"Dizziness",kw:["dizz","giddy","lightheaded"]},
+  {id:"fat",label:"Tiredness or weakness",kw:["tired","fatigue","weakness","weak"]},
+  {id:"wl",label:"Unexplained weight loss",kw:["weight loss","losing weight","lost weight"]},
+  {id:"wg",label:"Weight gain",kw:["weight gain","gaining weight"]},
+  {id:"thirst",label:"Excessive thirst",kw:["thirst","dry mouth"]},
+  {id:"urin",label:"Frequent urination",kw:["frequent urination","urinating often","night urination"]},
+  {id:"burnurin",label:"Burning while passing urine",kw:["burning urine","burning urination","burning while"]},
+  {id:"blur",label:"Blurred vision",kw:["blurred","blurry","vision"]},
+  {id:"leg",label:"Leg pain or cramps on walking",kw:["leg pain","calf","thigh pain","pain in leg"]},
+  {id:"legone",label:"Swelling in one leg",kw:["one leg","single leg"]},
+  {id:"swell",label:"Swelling of both feet or ankles",kw:["swollen feet","swelling feet","ankle swelling","swollen ankles"]},
+  {id:"num",label:"Numbness or tingling in feet or hands",kw:["numb","tingling","pins and needles"]},
+  {id:"burnfeet",label:"Burning feet",kw:["burning feet","burning sensation in feet","burning in feet"]},
+  {id:"cramp",label:"Muscle cramps",kw:["cramp"]},
+  {id:"slow",label:"Wounds or sores that heal slowly",kw:["slow healing","wound","ulcer on foot","sore that"]},
+  {id:"nausea",label:"Nausea",kw:["nausea","feel sick"]},
+  {id:"vomit",label:"Vomiting",kw:["vomit"]},
+  {id:"abd",label:"Abdominal pain",kw:["abdominal","stomach pain","belly pain","tummy"]},
+  {id:"diarr",label:"Loose motions",kw:["diarrh","loose motion"]},
+  {id:"constip",label:"Constipation",kw:["constipat"]},
+  {id:"heartb",label:"Heartburn or acidity",kw:["heartburn","acidity","acid reflux","sour"]},
+  {id:"appetite",label:"Loss of appetite",kw:["appetite","not eating"]},
+  {id:"yellow",label:"Yellow eyes or skin",kw:["yellow","jaundice"]},
+  {id:"joint",label:"Joint pain",kw:["joint","knee pain"]},
+  {id:"bodyache",label:"Body aches",kw:["body ache","body pain","myalgia"]},
+  {id:"back",label:"Back pain",kw:["back pain","backache","lower back"]},
+  {id:"rash",label:"Skin rash",kw:["rash"]},
+  {id:"itch",label:"Itching",kw:["itch"]},
+  {id:"cold",label:"Feeling cold easily",kw:["cold intolerance","feel cold"]},
+  {id:"heat",label:"Feeling hot, heat intolerance",kw:["heat intolerance","feel hot"]},
+  {id:"hair",label:"Hair loss",kw:["hair loss","hair fall"]},
+  {id:"night",label:"Night sweats",kw:["night sweat"]},
+  {id:"sweat",label:"Sudden sweating or shaking",kw:["sweating","shaking","tremor"]},
+  {id:"pale",label:"Pale skin",kw:["pale","pallor"]},
+  {id:"anx",label:"Anxiety or restlessness",kw:["anxi","restless","panic","worry"]},
+  {id:"mood",label:"Low mood",kw:["low mood","sad","depress","hopeless"]},
+  {id:"insomnia",label:"Poor sleep",kw:["insomnia","cannot sleep","poor sleep"]},
+  {id:"conf",label:"Confusion or drowsiness",kw:["confus","drowsy","drowsiness"]}
+];
+var HISTORY = [
+  {id:"diabetes",label:"Diabetes"},{id:"htn",label:"High blood pressure"},{id:"heart",label:"Heart disease"},
+  {id:"chol",label:"High cholesterol"},{id:"thyroid",label:"Thyroid disorder"},{id:"asthma",label:"Asthma"},
+  {id:"copd",label:"COPD or chronic bronchitis"},{id:"ckd",label:"Kidney disease"},{id:"liver",label:"Liver disease or fatty liver"},
+  {id:"anemia",label:"Anemia"},{id:"tb",label:"Tuberculosis"},{id:"migraine",label:"Migraine"},
+  {id:"arthritis",label:"Arthritis"},{id:"ulcer",label:"Stomach ulcer or gastritis"},{id:"smoker",label:"Smoking or tobacco"},
+  {id:"alcohol",label:"Regular alcohol"},{id:"stroke",label:"Stroke"},{id:"depress",label:"Depression or anxiety"},
+  {id:"obesity",label:"Overweight or obesity"},{id:"pregnant",label:"Pregnancy"},{id:"allergy",label:"Allergies or eczema"}
+];
+
+/* How a past condition commonly explains a current symptom */
+var LINKS = {
+  diabetes:{
+    thirst:"High blood sugar pulls water out of the body, so thirst and dry mouth are classic signs of poor control.",
+    urin:"Sugar spills into urine and carries water with it, which means more trips to the toilet, often at night.",
+    wl:"When cells cannot use glucose, the body burns fat and muscle for fuel, so weight falls even when eating normally.",
+    fat:"Cells starved of usable glucose leave a person drained. Dehydration from high sugar adds to it.",
+    blur:"High sugar swells the lens of the eye. Long-standing diabetes can also damage the retina.",
+    slow:"High sugar weakens white cells and narrows small vessels, so wounds heal slowly and get infected easily.",
+    leg:"Diabetes speeds up artery narrowing in the legs (cramping when walking) and can damage nerves (night pain).",
+    num:"Years of high sugar injure the nerves that reach the feet first, causing tingling and numbness.",
+    burnfeet:"Burning in the feet is a typical sign of diabetic nerve damage, often worse at night.",
+    cramp:"Nerve damage, dehydration and low potassium or magnesium can all cause cramps in people with diabetes.",
+    itch:"High sugar dries the skin and encourages fungal infection, and both cause itching.",
+    burnurin:"Sugar in the urine feeds bacteria, so urinary infections are more common in diabetes.",
+    swell:"Diabetes can harm the kidneys and heart, and both can make fluid collect in the feet.",
+    sweat:"Sweating, shaking and dizziness can mean sugar has dropped too low from medicines or a skipped meal.",
+    dizzy:"Dizziness can come from low sugar, dehydration from high sugar, or blood pressure changes.",
+    chest:"People with diabetes may feel less heart pain than others. Chest symptoms always deserve an urgent ECG.",
+    nausea:"Nausea in diabetes can signal ketones building up, kidney trouble, or slow stomach emptying."
+  },
+  htn:{
+    head:"Headaches, especially in the morning at the back of the head, can accompany very high blood pressure.",
+    dizzy:"Dizziness may come from high pressure itself or from blood pressure medicines lowering it too far.",
+    blur:"High pressure damages the small vessels of the retina.",
+    chest:"Long-standing high pressure strains the heart and speeds up artery disease.",
+    breath:"Over time the heart muscle thickens and stiffens, which causes breathlessness.",
+    swell:"A strained heart or kidneys under pressure can let fluid build up in the feet.",
+    palp:"High pressure can bring on irregular heartbeats such as atrial fibrillation."
+  },
+  heart:{
+    breath:"A weakened or blocked heart cannot keep up with demand, so breathlessness comes first on exertion.",
+    chest:"Chest pain in someone with heart disease must be treated as the heart until proven otherwise.",
+    swell:"A failing heart lets fluid back up into the feet and lungs.",
+    fat:"Reduced pumping means less blood and oxygen reach the muscles.",
+    palp:"Damaged heart muscle often triggers irregular rhythms.",
+    dizzy:"Low output or rhythm problems can drop blood flow to the brain."
+  },
+  thyroid:{
+    wl:"An overactive thyroid speeds up metabolism, so weight falls despite a good appetite.",
+    wg:"An underactive thyroid slows metabolism and holds fluid, so weight creeps up.",
+    cold:"A slow thyroid lowers body heat production.",
+    heat:"An overactive thyroid raises body heat and brings sweating.",
+    hair:"Thyroid imbalance in either direction thins hair.",
+    palp:"Excess thyroid hormone speeds up the heart.",
+    fat:"Too little thyroid hormone causes sluggishness. Too much causes exhaustion from overdrive.",
+    constip:"A slow thyroid slows the gut."
+  },
+  asthma:{
+    wheeze:"Inflamed, narrowed airways whistle on breathing out.",
+    breath:"Airway narrowing makes each breath a struggle, usually worse at night or with triggers.",
+    cough:"A dry night-time or exercise cough is common when asthma control slips.",
+    chesttight:"Tight airways feel like a band around the chest."
+  },
+  copd:{
+    cough:"Daily cough with phlegm is the hallmark of damaged airways.",
+    breath:"Damaged lungs move less air, so breathlessness builds with activity.",
+    wheeze:"Narrowed airways produce wheeze, especially during flare-ups."
+  },
+  ckd:{
+    swell:"Failing kidneys cannot remove salt and water, so the feet swell.",
+    itch:"Waste products that kidneys normally clear build up in the skin.",
+    nausea:"Waste buildup (uremia) upsets the stomach.",
+    fat:"Anemia and toxin buildup from kidney disease cause deep tiredness.",
+    appetite:"Uremia dulls appetite and changes taste.",
+    urin:"Damaged kidneys cannot concentrate urine, so night urination increases.",
+    cramp:"Mineral imbalances from kidney disease cause cramps."
+  },
+  anemia:{
+    fat:"Too little hemoglobin means tissues get less oxygen, so tiredness is the leading sign.",
+    pale:"Less hemoglobin makes the skin, nails and inner eyelids pale.",
+    dizzy:"The brain is sensitive to reduced oxygen delivery.",
+    breath:"The body breathes faster to make up for oxygen-poor blood.",
+    hair:"Iron deficiency often thins hair.",
+    palp:"The heart beats faster to move blood around."
+  },
+  liver:{
+    yellow:"A struggling liver cannot clear bilirubin, which stains eyes and skin yellow.",
+    abd:"Liver swelling stretches its capsule and causes dull pain on the right upper side.",
+    appetite:"Liver disease causes early fullness and nausea.",
+    itch:"Bile salts building up in the skin cause itching.",
+    fat:"The liver regulates energy, so illness there brings tiredness.",
+    swell:"Low albumin and portal pressure let fluid leak into the legs and abdomen.",
+    conf:"Toxins the liver would normally clear can reach the brain. This is urgent."
+  },
+  tb:{
+    cough:"A cough lasting more than 2 weeks is the lead warning sign of active TB.",
+    night:"Night sweats are a classic TB symptom.",
+    wl:"TB is a wasting illness and weight loss is typical.",
+    fever:"Low-grade evening fever is typical.",
+    appetite:"TB reduces appetite."
+  },
+  migraine:{
+    head:"A one-sided throbbing headache that comes in attacks matches migraine.",
+    nausea:"Nausea often comes with a migraine attack.",
+    blur:"Visual changes, called aura, can come before the headache."
+  }
+};
+</script>
+<script>
+var CONDITIONS = [
+{id:"hyper",name:"High blood sugar (poorly controlled diabetes)",urg:"mid",
+ sx:{thirst:3,urin:3,wl:2,fat:2,blur:2,slow:2,itch:1},hist:["diabetes"],vit:["glu_hi"],
+ why:"When insulin is lacking or not working well, sugar stays in the blood instead of entering cells. The kidneys flush the excess out with water, which causes thirst and frequent urination. Cells that cannot use glucose burn fat and muscle, which causes weight loss and tiredness. High sugar also swells the eye lens and weakens healing.",
+ tests:["HbA1c (3-month average sugar)","Fasting and after-meal blood glucose","Urine ketones","Serum creatinine and eGFR","Urine albumin-creatinine ratio","Lipid profile"],
+ meds:[{c:"Metformin",n:"Usual first tablet; kidney function must be checked first."},{c:"Sulfonylureas (for example glimepiride)",n:"Lower sugar but can cause lows."},{c:"DPP-4 inhibitors (for example sitagliptin, teneligliptin)",n:"Gentle add-on."},{c:"SGLT2 inhibitors (for example dapagliflozin, empagliflozin)",n:"Also protect heart and kidneys."},{c:"Insulin",n:"Needed when sugar is very high or tablets are not enough."}],
+ care:["Walk 30 minutes a day if able","Cut sweet drinks and refined carbs","Never skip diabetes medicine","Check sugar at home and keep a log","Drink water through the day"],
+ doc:"See a doctor within 1 to 2 days. Go to emergency care if sugar is above 300 mg/dL with vomiting, drowsiness, fast breathing or fruity breath."},
+{id:"dneuro",name:"Diabetic peripheral neuropathy (nerve damage)",urg:"mid",
+ sx:{num:3,burnfeet:3,leg:2,cramp:1,insomnia:1,slow:1},hist:["diabetes","alcohol","ckd"],vit:[],medKw:["metformin"],
+ why:"Years of high sugar damage the small vessels that feed nerves and the coating around them. The longest nerves, those to the feet, fail first, which gives tingling, burning, numbness and pain that is often worse at night. Loss of feeling means foot injuries go unnoticed. Long-term metformin can lower vitamin B12, which adds to nerve damage.",
+ tests:["HbA1c","Vitamin B12","TSH (thyroid)","Serum creatinine","Foot exam with monofilament and tuning fork","Nerve conduction study if unclear"],
+ meds:[{c:"Duloxetine",n:"Nerve-pain medicine (SNRI class)."},{c:"Pregabalin or gabapentin",n:"Calms nerve firing; can cause sleepiness."},{c:"Amitriptyline (low dose, at night)",n:"Older option; not for everyone with heart disease."},{c:"Capsaicin or lidocaine skin patch/cream",n:"Local relief."},{c:"Vitamin B12 (if low)",n:"Replaces the missing vitamin."}],
+ care:["Check both feet every day, including between toes","Wear closed, well-fitting footwear; never walk barefoot","Keep sugar steady; this slows further damage","Avoid hot water bottles on numb feet","Avoid regular painkillers like diclofenac without advice; they can strain kidneys"],
+ doc:"Book a visit soon. Go the same day for any foot wound, redness, swelling or black skin."},
+{id:"pad",name:"Peripheral artery disease (poor leg circulation)",urg:"mid",
+ sx:{leg:3,slow:2,num:1,cramp:1},hist:["diabetes","htn","smoker","heart","chol"],vit:[],
+ why:"Fatty plaque narrows the arteries to the legs. During walking the calf muscle needs more blood than can pass, so it cramps and aches, then settles within minutes of rest. Poor flow also slows healing. Diabetes, smoking, high pressure and cholesterol all speed this up.",
+ tests:["Ankle-brachial index (BP at ankle versus arm)","Doppler ultrasound of leg arteries","Lipid profile","HbA1c","Serum creatinine"],
+ meds:[{c:"Antiplatelet (aspirin or clopidogrel)",n:"Thins platelets to protect vessels."},{c:"Statin (for example atorvastatin, rosuvastatin)",n:"Lowers cholesterol and plaque risk."},{c:"Blood pressure control",n:"Often an ACE inhibitor or ARB."},{c:"Cilostazol",n:"May lengthen walking distance in selected patients."}],
+ care:["Stop all tobacco","Supervised walking: walk until the pain starts, rest, repeat","Daily foot inspection","Keep sugar and pressure on target"],
+ doc:"Go to emergency care at once for a cold, pale, very painful or numb foot, or black toes."},
+{id:"hypo",name:"Low blood sugar (hypoglycemia)",urg:"high",
+ sx:{sweat:3,dizzy:2,palp:2,anx:1,conf:2,fat:1,head:1},hist:["diabetes"],vit:["glu_lo"],
+ why:"Too much insulin or tablets, a missed meal, or unplanned exercise can drop sugar. The brain runs on glucose, so confusion and dizziness follow. The body releases adrenaline, which causes sweating, shaking and a racing heart.",
+ tests:["Finger-prick glucose right now","HbA1c","Review of medicine timing and doses","Serum creatinine (poor kidneys prolong drug action)"],
+ meds:[{c:"First aid: 15 g fast sugar (glucose tablets or half a glass of juice)",n:"Recheck in 15 minutes and repeat if still low. Eat a snack once it recovers."},{c:"Glucagon injection",n:"For severe lows when the person cannot swallow."},{c:"Dose review by the doctor",n:"Insulin and sulfonylureas are the usual causes."}],
+ care:["Carry glucose tablets or sugar","Never skip meals after taking diabetes medicine","Tell family how to help during a low"],
+ doc:"Treat immediately. Call 108 if the person is unconscious, fitting or cannot swallow safely."},
+{id:"htn",name:"High blood pressure not under control",urg:"mid",
+ sx:{head:2,dizzy:2,blur:1,palp:1,chest:1,nausea:1},hist:["htn"],vit:["bp_hi"],
+ why:"Pressure that stays high strains the arteries, heart, kidneys and eyes. Headache and dizziness appear when pressure is very high or changes quickly. Many people have no symptoms at all, so a reading matters more than how someone feels.",
+ tests:["Repeat BP at rest and a 24-hour BP monitor","Serum creatinine, sodium and potassium","Urine albumin","ECG and echocardiogram","Lipid profile and HbA1c","Eye (fundus) exam"],
+ meds:[{c:"ACE inhibitors (for example ramipril) or ARBs (for example telmisartan, losartan)",n:"Preferred in diabetes or kidney disease."},{c:"Calcium channel blockers (for example amlodipine)",n:"Common first or add-on choice."},{c:"Thiazide-like diuretics (for example chlorthalidone, indapamide)",n:"Reduce fluid load."},{c:"Beta-blockers",n:"Used when there is heart disease or fast pulse."}],
+ care:["Cut salt to under 5 g a day","Walk daily; lose weight if overweight","Limit alcohol; stop tobacco","Measure BP at home, seated, same time daily"],
+ doc:"See a doctor within days. Go to emergency care if 180/120 or higher with chest pain, breathlessness, weakness, confusion or severe headache."},
+{id:"hf",name:"Heart failure (heart not pumping well)",urg:"high",
+ sx:{breath:3,swell:3,fat:2,cough:1,palp:1,dizzy:1},hist:["heart","htn","diabetes"],vit:["spo2_lo"],
+ why:"A weak or stiff heart cannot move blood forward, so fluid backs up. Fluid in the lungs causes breathlessness, worse lying flat. Fluid in the legs causes swelling. Less blood to muscles causes tiredness.",
+ tests:["ECG","Echocardiogram","NT-proBNP blood test","Chest X-ray","CBC, creatinine, electrolytes, TSH"],
+ meds:[{c:"Loop diuretic (for example furosemide)",n:"Removes extra fluid."},{c:"ACE inhibitor, ARB or ARNI",n:"Protects the heart."},{c:"Beta-blocker (for example bisoprolol, metoprolol succinate)",n:"Slows and protects the heart."},{c:"Spironolactone",n:"Added for survival benefit; potassium must be monitored."},{c:"SGLT2 inhibitor",n:"Reduces hospital stays."}],
+ care:["Weigh daily; report a rise of 2 kg in 3 days","Limit salt and extra fluids as advised","Sleep with head raised if needed"],
+ doc:"Needs a doctor within 24 hours. Call 108 for severe breathlessness at rest or pink frothy cough."},
+{id:"cad",name:"Angina or coronary artery disease",urg:"high",
+ sx:{chest:3,breath:2,nausea:1,sweat:1,palp:1,fat:1},hist:["heart","diabetes","htn","chol","smoker"],vit:[],
+ why:"Fatty plaque narrows the arteries that feed the heart muscle. On exertion the heart needs more blood than can pass, which causes pressure or tightness in the chest that eases with rest. People with diabetes often feel little pain and may only notice breathlessness or fatigue.",
+ tests:["ECG","Troponin blood test if pain is present now","Treadmill test or stress echo","Echocardiogram","Lipid profile and HbA1c","Coronary angiography if indicated"],
+ meds:[{c:"Antiplatelet (aspirin or clopidogrel)",n:"Prevents clots."},{c:"Statin",n:"Stabilises plaque."},{c:"Beta-blocker",n:"Eases heart workload."},{c:"Nitrates (for example sublingual glyceryl trinitrate)",n:"Quick relief of an attack."},{c:"ACE inhibitor or ARB",n:"Protects heart and vessels."}],
+ care:["Stop tobacco","Control sugar, BP and cholesterol","Avoid heavy exertion until assessed"],
+ doc:"Chest pain lasting more than 10 minutes, or with sweating, breathlessness or pain spreading to arm or jaw, is an emergency. Call 108."},
+{id:"hypot",name:"Underactive thyroid (hypothyroidism)",urg:"low",
+ sx:{fat:2,wg:3,cold:3,constip:2,hair:2,mood:1},hist:["thyroid"],vit:[],
+ why:"Too little thyroid hormone slows the whole body: energy production falls, the gut slows, and the body holds fluid. That produces tiredness, weight gain, cold intolerance, dry skin and constipation.",
+ tests:["TSH","Free T4","Anti-TPO antibodies","Lipid profile","CBC"],
+ meds:[{c:"Levothyroxine",n:"Dose set by TSH. Take on an empty stomach, 4 hours apart from iron or calcium."}],
+ care:["Take thyroid tablet at the same time daily","Repeat TSH every 6 to 12 weeks after dose changes"],
+ doc:"Routine visit; sooner if very sleepy, very slow pulse or confusion."},
+{id:"hyperT",name:"Overactive thyroid (hyperthyroidism)",urg:"mid",
+ sx:{wl:3,heat:3,palp:3,anx:2,insomnia:1,diarr:1,fat:1,sweat:1},hist:["thyroid"],vit:["pulse_hi"],
+ why:"Too much thyroid hormone speeds metabolism. The body burns energy fast, so weight falls despite eating well, the heart races, hands tremble, and heat feels unbearable.",
+ tests:["TSH","Free T3 and T4","TSH-receptor antibody","Thyroid ultrasound or scan","ECG"],
+ meds:[{c:"Antithyroid tablets (carbimazole or methimazole; propylthiouracil in early pregnancy)",n:"Slow hormone production."},{c:"Beta-blocker (for example propranolol)",n:"Controls palpitations and tremor quickly."},{c:"Radioiodine or surgery",n:"Longer-term options for a specialist."}],
+ care:["Avoid excess caffeine","Rest and stay hydrated"],
+ doc:"See a doctor within a week. Emergency if fever, very fast pulse, vomiting and confusion."},
+{id:"ida",name:"Iron-deficiency anemia",urg:"low",
+ sx:{fat:3,pale:3,dizzy:2,breath:1,hair:1,palp:1},hist:["anemia"],vit:["pulse_hi"],sexBoost:"Female",
+ why:"Without enough iron the body cannot make hemoglobin, so blood carries less oxygen. Tissues tire, the skin looks pale, the heart beats faster, and exertion causes breathlessness. Common causes are heavy periods, poor diet, worms, pregnancy, or slow blood loss from the gut.",
+ tests:["CBC with MCV","Peripheral smear","Serum ferritin, iron and TIBC","Vitamin B12 and folate","Stool occult blood or endoscopy in adult men and postmenopausal women"],
+ meds:[{c:"Oral iron (ferrous sulfate, ascorbate or bisglycinate)",n:"Take with vitamin C; may darken stools."},{c:"Intravenous iron",n:"If tablets are not tolerated or absorbed."},{c:"Treat the cause",n:"Heavy periods, worms or gut bleeding."}],
+ care:["Eat iron-rich foods: greens, ragi, dates, jaggery, pulses, meat","Avoid tea or coffee within an hour of iron"],
+ doc:"Visit within a week. Urgent if breathless at rest, chest pain or black stools."},
+{id:"asthma",name:"Asthma flare-up",urg:"mid",
+ sx:{wheeze:3,breath:3,cough:3,chesttight:3,fat:1},hist:["asthma","allergy"],vit:["spo2_lo"],
+ why:"The airway lining swells and the muscles around it tighten in response to triggers such as dust, smoke, cold air, infection or exercise. Air moves through narrowed tubes, which causes wheeze, cough and breathlessness, often worse at night.",
+ tests:["Peak flow reading","Spirometry before and after a reliever","SpO₂","CBC (eosinophils)","Chest X-ray if fever"],
+ meds:[{c:"Reliever inhaler (salbutamol)",n:"Opens airways quickly."},{c:"Inhaled steroid with or without long-acting reliever (budesonide, budesonide-formoterol)",n:"Controls inflammation."},{c:"Short oral steroid course",n:"For a bad flare, by prescription."},{c:"Montelukast",n:"Add-on, especially with allergies."}],
+ care:["Identify and avoid triggers","Rinse mouth after steroid inhaler","Use a spacer if advised"],
+ doc:"Go to emergency care if speech is broken by breathlessness, lips turn blue, or the reliever lasts under 4 hours."},
+{id:"copd",name:"COPD flare-up",urg:"mid",
+ sx:{cough:3,breath:3,wheeze:2,fever:1,fat:1},hist:["copd","smoker","asthma"],vit:["spo2_lo"],
+ why:"Long-term smoke or dust exposure scars and narrows the airways and wrecks air sacs. An infection or pollution can then tip breathing over the edge, with more cough, phlegm and breathlessness.",
+ tests:["Chest X-ray","Spirometry (when stable)","SpO₂","CBC","Sputum culture"],
+ meds:[{c:"Long-acting bronchodilators (tiotropium, formoterol)",n:"Daily control."},{c:"Salbutamol reliever",n:"For flare-ups."},{c:"Oral steroid and antibiotics",n:"Only if the doctor finds a bacterial flare."}],
+ care:["Stop tobacco","Avoid smoke and dust","Vaccines: flu and pneumococcal"],
+ doc:"See a doctor within 24 hours. Emergency if breathless at rest or lips are blue."},
+{id:"cold",name:"Common cold or viral throat infection",urg:"low",
+ sx:{runny:3,sore:3,cough:2,fever:1,head:1},hist:[],vit:[],
+ why:"Viruses such as rhinovirus infect the nose and throat. The immune response causes swelling, mucus and soreness. It settles by itself in 5 to 10 days. Antibiotics do not help.",
+ tests:["Usually none"],
+ meds:[{c:"Paracetamol",n:"For fever or pain."},{c:"Saline nasal rinse and steam",n:"Clears blocked nose."},{c:"Antihistamine (for example cetirizine)",n:"Helps runny nose; can cause sleepiness."}],
+ care:["Rest and warm fluids","Salt-water gargle","Avoid antibiotics unless a doctor finds bacterial infection"],
+ doc:"See a doctor if over 10 days, fever above 102°F or breathing trouble."},
+{id:"viral",name:"Viral fever or influenza-like illness",urg:"low",
+ sx:{fever:3,head:2,bodyache:3,fat:2,cough:2,sore:1,appetite:1},hist:[],vit:["temp_hi"],
+ why:"A viral infection sets off the immune system, which raises body temperature and causes muscle aches, headache and tiredness. Most cases settle in 3 to 5 days. In India, fever lasting more than 3 days should also be checked for dengue, malaria and typhoid.",
+ tests:["CBC","Malaria rapid test or smear","Dengue NS1 antigen","CRP","Urine routine"],
+ meds:[{c:"Paracetamol",n:"For fever and aches."},{c:"Oral rehydration or plenty of fluids",n:"Prevents dehydration."},{c:"Oseltamivir",n:"Only for confirmed flu in high-risk people, within 48 hours."}],
+ care:["Rest, drink plenty of fluids","Sponge with room-temperature water if fever is high"],
+ doc:"See a doctor if fever lasts over 3 days or any warning sign appears."},
+{id:"dengue",name:"Dengue fever",urg:"mid",
+ sx:{fever:3,bodyache:3,head:2,rash:2,nausea:1,vomit:1,fat:2,joint:1},hist:[],vit:["temp_hi"],
+ why:"Dengue is spread by Aedes mosquitoes and causes sudden high fever with severe body, joint and eye pain. Around days 3 to 7 platelets may fall and blood vessels can leak, which is when danger appears.",
+ tests:["NS1 antigen (first 5 days)","Dengue IgM and IgG","CBC with platelet count and hematocrit, repeated daily"],
+ meds:[{c:"Paracetamol only",n:"Do not take ibuprofen, aspirin or diclofenac; they raise bleeding risk."},{c:"Oral or IV fluids",n:"Main treatment."}],
+ care:["Drink 3 to 4 litres of fluids a day","Rest","Prevent mosquito bites to protect others"],
+ doc:"Go to hospital for bleeding gums or nose, black stools, persistent vomiting, severe belly pain, cold hands or extreme drowsiness."},
+{id:"typhoid",name:"Typhoid (enteric fever)",urg:"mid",
+ sx:{fever:3,abd:2,appetite:2,constip:1,diarr:1,head:1,fat:2},hist:[],vit:["temp_hi"],
+ why:"Salmonella Typhi spreads through contaminated food and water. It causes a step-ladder fever that climbs over days, belly pain, loss of appetite and tiredness. Treatment works best when started on proven infection.",
+ tests:["Blood culture (most reliable)","CBC","Liver function tests","Typhidot IgM; the Widal test is unreliable alone"],
+ meds:[{c:"Antibiotic chosen by the doctor after testing",n:"Resistance is common in India (azithromycin and ceftriaxone are frequently used)."},{c:"Paracetamol",n:"For fever."},{c:"Fluids and soft diet",n:"Supportive."}],
+ care:["Boiled or filtered water only","Wash hands before eating","Do not self-start antibiotics"],
+ doc:"See a doctor within 1 to 2 days. Emergency for severe belly pain, black stools or confusion."},
+{id:"gastro",name:"Gastroenteritis (stomach infection)",urg:"low",
+ sx:{diarr:3,vomit:3,abd:2,nausea:2,fever:1},hist:[],vit:[],
+ why:"A virus, bacteria or contaminated food irritates the gut, which pushes fluid out as loose stools and vomit. The main risk is dehydration, which is faster and more dangerous in diabetes, kidney disease and older adults.",
+ tests:["Usually none","Stool routine if blood or fever","Electrolytes and creatinine if very dehydrated"],
+ meds:[{c:"Oral rehydration solution (ORS)",n:"The most important treatment."},{c:"Zinc (children)",n:"Shortens illness."},{c:"Ondansetron",n:"For vomiting, if prescribed."},{c:"Antibiotic",n:"Only if blood in stool or high fever, by prescription."}],
+ care:["Small, frequent sips of ORS","Do not stop insulin; ask the doctor about adjusting diabetes tablets while ill","Eat bland food when hunger returns"],
+ doc:"See a doctor if no urine for 8 hours, blood in stool, fever above 102°F, or symptoms over 3 days."},
+{id:"gerd",name:"Acid reflux or gastritis",urg:"low",
+ sx:{heartb:3,abd:2,nausea:1,chest:1,appetite:1},hist:["ulcer","alcohol","smoker","obesity"],vit:[],
+ why:"Stomach acid flows back into the food pipe or irritates the stomach lining. Late meals, spicy food, alcohol, tobacco and painkillers (NSAIDs) make it worse. It can mimic heart pain, so chest pain needs a heart check first.",
+ tests:["Usually a clinical diagnosis","H. pylori stool antigen or breath test","Endoscopy if weight loss, vomiting, black stools, trouble swallowing, or age over 45"],
+ meds:[{c:"Antacid or alginate",n:"Quick relief."},{c:"Proton pump inhibitor (for example pantoprazole, rabeprazole)",n:"Short course before breakfast."},{c:"H2 blocker (famotidine)",n:"Milder alternative."},{c:"Stop NSAID painkillers",n:"A common hidden cause."}],
+ care:["Smaller, earlier dinners","Raise head of bed","Cut alcohol, tobacco and very spicy food"],
+ doc:"See a doctor if symptoms last more than 2 weeks, or any alarm sign appears."},
+{id:"uti",name:"Urinary tract infection",urg:"mid",
+ sx:{burnurin:3,urin:2,abd:1,fever:1,back:1},hist:["diabetes","ckd"],vit:["temp_hi"],
+ why:"Bacteria from the gut climb the urethra into the bladder. The lining becomes inflamed, which causes burning and a constant urge to pass urine. Sugar in diabetic urine feeds bacteria. Fever or back pain suggests it has reached the kidneys.",
+ tests:["Urine routine","Urine culture and sensitivity","CBC","Serum creatinine","Ultrasound KUB if recurrent, fever or back pain"],
+ meds:[{c:"Antibiotic chosen by culture result (for example nitrofurantoin, fosfomycin, cephalexin)",n:"Resistance is common; do not self-treat."},{c:"Paracetamol",n:"For pain or fever."},{c:"Plenty of water",n:"Helps flush bacteria."}],
+ care:["Drink 2 to 3 litres of water a day","Do not hold urine","Keep sugar controlled"],
+ doc:"See a doctor within a day. Emergency for fever with shivering, vomiting or flank pain."},
+{id:"ckd",name:"Kidney function decline (chronic kidney disease)",urg:"mid",
+ sx:{fat:2,swell:2,nausea:1,appetite:1,itch:2,urin:1,cramp:1},hist:["ckd","diabetes","htn"],vit:[],
+ why:"Diabetes and high pressure slowly scar the kidney filters. Waste, salt and water are not cleared well, which causes swollen feet, itching, nausea and tiredness. Early disease often has no symptoms, so blood and urine tests matter.",
+ tests:["Serum creatinine and eGFR","Urine albumin-creatinine ratio","Urine routine","Kidney ultrasound","Sodium, potassium, calcium, phosphate","CBC, vitamin D and PTH"],
+ meds:[{c:"ACE inhibitor or ARB",n:"Reduces protein leak."},{c:"SGLT2 inhibitor",n:"Slows kidney decline."},{c:"Diuretic",n:"For swelling."},{c:"Strict BP and sugar control",n:"Most effective step."},{c:"Avoid NSAID painkillers",n:"Can harm kidneys."}],
+ care:["Low salt diet","Avoid herbal or painkiller remedies without advice","Drink fluids as advised, not excessively"],
+ doc:"See a doctor within a week. Emergency if very little urine, breathlessness, or confusion."},
+{id:"liver",name:"Liver problem (fatty liver or hepatitis)",urg:"mid",
+ sx:{yellow:3,fat:2,appetite:2,abd:1,nausea:1,itch:1},hist:["liver","alcohol","obesity","diabetes"],vit:[],
+ why:"Fat, alcohol or viruses inflame the liver. It then clears bilirubin poorly (yellow eyes), digests fat poorly (nausea, poor appetite) and loses energy regulation (tiredness).",
+ tests:["Liver function tests","Ultrasound abdomen","Hepatitis B and C tests","INR and albumin","FibroScan"],
+ meds:[{c:"No specific tablet for most fatty liver",n:"Weight loss and sugar control are treatment."},{c:"Antivirals for hepatitis B or C",n:"By a specialist."},{c:"Avoid alcohol and unprescribed medicines",n:"Including herbal products."}],
+ care:["Stop alcohol","Lose 7 to 10% body weight if overweight","Limit paracetamol"],
+ doc:"See a doctor soon. Emergency for vomiting blood, black stools, confusion or severe drowsiness."},
+{id:"migraine",name:"Migraine",urg:"low",
+ sx:{head:3,nausea:2,blur:1,dizzy:1,vomit:1},hist:["migraine"],vit:[],
+ why:"A wave of nerve activity and blood vessel changes causes a throbbing one-sided headache, often with nausea and sensitivity to light and sound. Triggers include missed meals, poor sleep, stress and hormones.",
+ tests:["Usually a clinical diagnosis","MRI only for warning signs: sudden worst headache, new weakness, onset after 50, or fever with stiff neck"],
+ meds:[{c:"Paracetamol or a short NSAID course, early in the attack",n:"Avoid NSAIDs with kidney disease or ulcers."},{c:"Triptan (for example sumatriptan)",n:"Not for people with heart disease."},{c:"Anti-nausea medicine",n:"Helps absorb pain tablets."},{c:"Preventive (propranolol, amitriptyline, topiramate)",n:"For frequent attacks."}],
+ care:["Keep regular meals and sleep","Rest in a dark, quiet room","Keep a headache diary"],
+ doc:"Emergency for a sudden thunderclap headache, weakness, speech or vision loss."},
+{id:"oa",name:"Osteoarthritis (joint wear)",urg:"low",
+ sx:{joint:3,back:1,leg:1},hist:["arthritis","obesity"],vit:[],ageBoost:50,
+ why:"Cartilage gradually thins, so bones rub and the joint inflames. Pain builds with use and eases with rest, with brief morning stiffness. Extra weight loads the knees.",
+ tests:["X-ray of the joint","ESR, CRP and rheumatoid factor to exclude other arthritis","Uric acid","Vitamin D"],
+ meds:[{c:"Paracetamol",n:"First choice."},{c:"Topical NSAID gel",n:"Safer for kidneys and stomach."},{c:"Short oral NSAID course",n:"Only if kidneys, stomach and heart allow."},{c:"Physiotherapy and weight loss",n:"The most effective long-term steps."}],
+ care:["Strengthen thigh muscles","Lose weight if overweight","Use a walking stick if needed"],
+ doc:"Visit if pain wakes you at night, the joint is hot and red, or you cannot bear weight."},
+{id:"tb",name:"Tuberculosis (TB)",urg:"mid",
+ sx:{cough:3,fever:2,night:3,wl:3,appetite:1,fat:2},hist:["tb","diabetes"],vit:[],
+ why:"TB bacteria infect the lungs and cause a long cough, evening fever, night sweats and weight loss. Diabetes weakens immunity and raises the risk. TB is curable but must be confirmed by tests before treatment.",
+ tests:["Sputum smear and CBNAAT or Truenat test","Chest X-ray","HIV test","HbA1c","Liver function tests before treatment"],
+ meds:[{c:"Standard 6-month combination (isoniazid, rifampicin, pyrazinamide, ethambutol)",n:"Started only after confirmation. Free through India's national TB programme (Nikshay)."}],
+ care:["Cover mouth when coughing","Keep rooms ventilated","Finish the full course if prescribed"],
+ doc:"Cough for over 2 weeks with fever or weight loss needs testing this week. Emergency if coughing blood."},
+{id:"anx",name:"Anxiety",urg:"low",
+ sx:{anx:3,palp:2,insomnia:2,dizzy:1,breath:1,chest:1,sweat:1},hist:["depress"],vit:[],
+ why:"The stress response stays switched on. Adrenaline speeds the heart, tightens the chest and disturbs sleep. Physical causes such as thyroid disease, low sugar or heart rhythm problems must be ruled out first.",
+ tests:["TSH","Blood glucose","ECG","CBC","GAD-7 questionnaire"],
+ meds:[{c:"Cognitive behavioural therapy",n:"First-line."},{c:"SSRIs (for example escitalopram, sertraline)",n:"By a psychiatrist or doctor."},{c:"Short-term sedatives",n:"Only under specialist advice; they can cause dependence."}],
+ care:["Slow breathing: in for 4, out for 6, for 5 minutes","Regular sleep and exercise","Cut caffeine"],
+ doc:"Tele-MANAS (India, free, 24 hours): 14416. Seek care promptly if you think of harming yourself."},
+{id:"dep",name:"Depression",urg:"low",
+ sx:{mood:3,fat:2,insomnia:2,appetite:1,anx:1},hist:["depress"],vit:[],
+ why:"Low mood that lasts weeks changes sleep, energy, appetite and concentration. Thyroid disease, anemia and low vitamin B12 can look the same and should be checked.",
+ tests:["PHQ-9 questionnaire","TSH","CBC","Vitamin B12 and D","Blood glucose"],
+ meds:[{c:"Talk therapy",n:"Effective alone for mild to moderate cases."},{c:"SSRIs and other antidepressants",n:"Prescribed and monitored by a doctor."}],
+ care:["Daily walk and sunlight","Keep a routine","Talk to someone you trust"],
+ doc:"Tele-MANAS (India, free, 24 hours): 14416. If you have thoughts of ending your life, call 112 or go to the nearest hospital now."},
+{id:"b12",name:"Vitamin B12 deficiency",urg:"low",
+ sx:{num:2,fat:2,pale:1,mood:1,dizzy:1,burnfeet:1},hist:[],vit:[],medKw:["metformin","pantoprazole","omeprazole","rabeprazole","esomeprazole"],
+ why:"B12 keeps nerves and blood cells healthy. Vegetarian diets, long-term metformin and acid-reducing tablets lower it. A shortage causes tingling, tiredness and sometimes anemia.",
+ tests:["Serum vitamin B12","Homocysteine or methylmalonic acid","CBC and MCV","Folate"],
+ meds:[{c:"Vitamin B12 injections or high-dose oral (methylcobalamin, cyanocobalamin)",n:"Dose and duration by the doctor."}],
+ care:["Eggs, dairy, fish or fortified foods","Ask the doctor to check B12 yearly if on metformin"],
+ doc:"Routine visit; sooner with trouble walking or balance."},
+{id:"sciatica",name:"Sciatica (pinched nerve in the lower back)",urg:"mid",
+ sx:{back:3,leg:3,num:2,cramp:1},hist:[],vit:[],
+ why:"A bulging disc or narrowed spinal canal presses a nerve root in the lower back. Pain shoots from the buttock down the back of the leg, often with tingling, and worsens with sitting or bending.",
+ tests:["Clinical leg-raise test","MRI of lumbar spine if pain lasts beyond 6 weeks or red flags","Vitamin D, sugar"],
+ meds:[{c:"Short NSAID course",n:"Only if kidneys, stomach and heart allow."},{c:"Muscle relaxant",n:"Short-term."},{c:"Pregabalin or gabapentin",n:"For nerve pain."},{c:"Physiotherapy",n:"Core of treatment."}],
+ care:["Stay gently active; avoid long bed rest","Avoid heavy lifting and forward bending"],
+ doc:"Emergency for loss of bladder or bowel control, numbness around the groin, or sudden leg weakness."},
+{id:"dvt",name:"Deep vein thrombosis (leg blood clot)",urg:"high",
+ sx:{legone:3,leg:2,swell:1},hist:["obesity","pregnant"],vit:[],
+ why:"A clot forms in a deep leg vein, blocking blood return. The leg becomes swollen, warm and painful, usually on one side. Pieces can travel to the lungs, so this needs same-day testing.",
+ tests:["D-dimer blood test","Compression Doppler ultrasound of the leg"],
+ meds:[{c:"Anticoagulant (heparin, rivaroxaban, apixaban, warfarin)",n:"Started and dosed by a doctor after confirmation."}],
+ care:["Do not massage the leg","Keep moving only as the doctor advises"],
+ doc:"Same-day hospital visit. Call 108 if breathless or chest pain develops."},
+{id:"eczema",name:"Skin allergy or eczema",urg:"low",
+ sx:{itch:3,rash:3},hist:["allergy"],vit:[],
+ why:"The skin barrier breaks down and the immune system overreacts, causing dryness, itch and rash. In people with diabetes, high sugar and fungal infection are also common causes of itching.",
+ tests:["Usually a clinical diagnosis","Skin scraping for fungus","Total IgE or patch test if recurrent","HbA1c if diabetes is suspected"],
+ meds:[{c:"Moisturiser (emollient), used often",n:"Foundation of treatment."},{c:"Topical steroid cream",n:"Short courses by prescription."},{c:"Antihistamine (cetirizine, levocetirizine)",n:"Eases itch."},{c:"Antifungal cream",n:"If fungal."}],
+ care:["Short lukewarm baths","Fragrance-free soap","Cotton clothing"],
+ doc:"See a doctor if the rash spreads fast, blisters, oozes, or comes with fever."}
+];
+
+var TEST_NOTE = {
+  base:["Complete blood count (CBC)","Fasting and after-meal blood glucose","Serum creatinine"]
+};
+</script>
+<script>
+(function(){
+var $=function(id){return document.getElementById(id)};
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function byId(list,id){for(var i=0;i<list.length;i++){if(list[i].id===id)return list[i]}return null}
+function lab(list,id){var x=byId(list,id);return x?x.label:id}
+function numv(id){var v=parseFloat($(id).value);return isNaN(v)?null:v}
+var DUR={"1":"less than 2 days","2":"2 to 7 days","3":"1 to 4 weeks","4":"1 to 3 months","5":"more than 3 months"};
+var URG={high:"Needs urgent care",mid:"See a doctor soon",low:"Usually mild"};
+var lastText="";
+
+/* ---------- chips ---------- */
+function buildChips(){
+  $("symChips").innerHTML=SYMPTOMS.map(function(s){
+    return '<label class="chip" data-label="'+esc(s.label.toLowerCase())+'"><input type="checkbox" name="sym" value="'+s.id+'"><span>'+esc(s.label)+'</span></label>';
+  }).join("");
+  $("histChips").innerHTML=HISTORY.map(function(h){
+    return '<label class="chip hist"><input type="checkbox" name="hist" value="'+h.id+'"><span>'+esc(h.label)+'</span></label>';
+  }).join("");
+}
+function checked(name){
+  return Array.prototype.map.call(document.querySelectorAll('input[name="'+name+'"]:checked'),function(i){return i.value});
+}
+function setChecked(name,ids){
+  Array.prototype.forEach.call(document.querySelectorAll('input[name="'+name+'"]'),function(i){i.checked=ids.indexOf(i.value)>-1});
+}
+function counts(){
+  $("symCount").textContent=checked("sym").length+" selected";
+  $("histCount").textContent=checked("hist").length+" selected";
+}
+function filterSyms(){
+  var q=$("symSearch").value.trim().toLowerCase();
+  Array.prototype.forEach.call($("symChips").children,function(ch){
+    var on=ch.querySelector("input").checked;
+    ch.hidden=!(on||!q||ch.getAttribute("data-label").indexOf(q)>-1);
+  });
+}
+
+/* ---------- navigation ---------- */
+var cur=1;
+function go(n){
+  cur=n;
+  [1,2,3].forEach(function(i){$("step"+i).hidden=(i!==n)});
+  Array.prototype.forEach.call($("steps").children,function(li,idx){
+    li.className=(idx+1===n)?"on":(idx+1<n?"done":"");
+  });
+  window.scrollTo(0,0);
+}
+function toast(msg){
+  var t=$("toast");t.textContent=msg;t.hidden=false;
+  clearTimeout(toast._t);toast._t=setTimeout(function(){t.hidden=true},2200);
+}
+
+/* ---------- validation ---------- */
+function setErr(id,msg){
+  var e=document.querySelector('.err[data-for="'+id+'"]');
+  if(e)e.textContent=msg||"";
+  var f=$(id).closest(".field");
+  if(f)f.classList.toggle("bad",!!msg);
+  return !msg;
+}
+function validate(){
+  var ok=true;
+  var name=$("pName").value.trim();
+  ok=setErr("pName",name.length<2?"Enter the patient's full name.":"")&&ok;
+  var age=numv("pAge");
+  ok=setErr("pAge",(age===null||age<0||age>120)?"Enter an age between 0 and 120.":"")&&ok;
+  ok=setErr("pSex",$("pSex").value?"":"Select sex.")&&ok;
+  var ph=$("pPhone").value.replace(/[\s-]/g,"").replace(/^(\+91|0)/,"");
+  ok=setErr("pPhone",/^[6-9]\d{9}$/.test(ph)?"":"Enter a 10-digit Indian mobile number.")&&ok;
+  var em=$("pEmail").value.trim();
+  ok=setErr("pEmail",(em&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em))?"Check the email address.":"")&&ok;
+  return ok;
+}
+
+/* ---------- sample / clear ---------- */
+var FIELDS=["pName","pAge","pSex","pPhone","pEmail","pCity","pWt","pHt","pEmName","pEmPhone","otherSym","meds","allergies","otherHist","vTemp","vSys","vDia","vPulse","vSpo2","vGlu"];
+function loadSample(){
+  var d={pName:"Sample Patient",pAge:"54",pSex:"Male",pPhone:"9876543210",pEmail:"",pCity:"Sample City",pWt:"78",pHt:"168",pEmName:"Sample Relative",pEmPhone:"9876500000",
+    otherSym:"Pain in the calf when walking, worse at night",meds:"Metformin 500 mg twice daily, Amlodipine 5 mg",allergies:"",otherHist:"Diabetes for 9 years",
+    vTemp:"",vSys:"148",vDia:"92",vPulse:"84",vSpo2:"97",vGlu:"286"};
+  FIELDS.forEach(function(k){$(k).value=d[k]||""});
+  setChecked("sym",["leg","wl","thirst","urin","num","fat"]);
+  setChecked("hist",["diabetes","htn"]);
+  $("duration").value="4";$("severity").value="6";$("sevOut").textContent="6";
+  counts();filterSyms();$("sampleBar").hidden=false;
+}
+function clearAll(){
+  FIELDS.forEach(function(k){$(k).value=""});
+  setChecked("sym",[]);setChecked("hist",[]);
+  $("duration").value="3";$("severity").value="5";$("sevOut").textContent="5";
+  $("symSearch").value="";counts();filterSyms();
+  Array.prototype.forEach.call(document.querySelectorAll(".err"),function(e){e.textContent=""});
+  Array.prototype.forEach.call(document.querySelectorAll(".field.bad"),function(f){f.classList.remove("bad")});
+  $("sampleBar").hidden=true;
+}
+
+/* ---------- analysis ---------- */
+function gather(){
+  var sel=checked("sym"),extra=[];
+  var other=($("otherSym").value||"").toLowerCase();
+  SYMPTOMS.forEach(function(s){
+    if(sel.indexOf(s.id)<0&&s.kw.some(function(k){return other.indexOf(k)>-1})){sel.push(s.id);extra.push(s.id)}
+  });
+  var v={temp:numv("vTemp"),sys:numv("vSys"),dia:numv("vDia"),pulse:numv("vPulse"),spo2:numv("vSpo2"),glu:numv("vGlu")};
+  var flags=[];
+  if(v.glu!==null&&v.glu>=180)flags.push("glu_hi");
+  if(v.glu!==null&&v.glu<70)flags.push("glu_lo");
+  if((v.sys!==null&&v.sys>=140)||(v.dia!==null&&v.dia>=90))flags.push("bp_hi");
+  if(v.spo2!==null&&v.spo2<94)flags.push("spo2_lo");
+  if(v.pulse!==null&&v.pulse>100)flags.push("pulse_hi");
+  if(v.temp!==null&&v.temp>=100.4)flags.push("temp_hi");
+  var wt=numv("pWt"),ht=numv("pHt"),bmi=null;
+  if(wt&&ht)bmi=wt/Math.pow(ht/100,2);
+  return {
+    p:{name:$("pName").value.trim(),age:numv("pAge"),sex:$("pSex").value,phone:$("pPhone").value.trim(),email:$("pEmail").value.trim(),city:$("pCity").value.trim(),
+       emName:$("pEmName").value.trim(),emPhone:$("pEmPhone").value.trim()},
+    sel:sel,extra:extra,hist:checked("hist"),meds:($("meds").value||"").toLowerCase(),medsRaw:$("meds").value.trim(),
+    allergies:($("allergies").value||"").toLowerCase(),allergiesRaw:$("allergies").value.trim(),otherHist:$("otherHist").value.trim(),otherSymRaw:$("otherSym").value.trim(),
+    v:v,flags:flags,bmi:bmi,dur:$("duration").value,sev:parseInt($("severity").value,10)
+  };
+}
+function bmiLabel(b){
+  if(b<18.5)return "Underweight";
+  if(b<23)return "Normal";
+  if(b<25)return "Overweight";
+  return "Obese";
+}
+function redFlags(d){
+  var out=[],s=function(id){return d.sel.indexOf(id)>-1},v=d.v;
+  if(v.glu!==null&&v.glu>=300)out.push({lvl:"crit",t:"Blood sugar is "+v.glu+" mg/dL. Very high sugar can lead to ketoacidosis. Seek emergency care if there is vomiting, drowsiness, fast breathing, or fruity breath."});
+  if(v.glu!==null&&v.glu<70)out.push({lvl:"crit",t:"Blood sugar is "+v.glu+" mg/dL, which is low. Give 15 g fast sugar now and recheck in 15 minutes. Call 108 if the person cannot swallow or is unresponsive."});
+  if((v.sys!==null&&v.sys>=180)||(v.dia!==null&&v.dia>=120))out.push({lvl:"crit",t:"Blood pressure is "+(v.sys||"?")+"/"+(v.dia||"?")+". With headache, chest pain, breathlessness, weakness or confusion this is an emergency."});
+  if(v.spo2!==null&&v.spo2<92)out.push({lvl:"crit",t:"Oxygen saturation is "+v.spo2+"%. This is low and needs emergency assessment."});
+  else if(v.spo2!==null&&v.spo2<94)out.push({lvl:"warn",t:"Oxygen saturation is "+v.spo2+"%, slightly low. Recheck and see a doctor today."});
+  if(v.temp!==null&&v.temp>=103)out.push({lvl:"warn",t:"Temperature is "+v.temp+"°F. A fever this high needs a doctor the same day."});
+  if(v.pulse!==null&&(v.pulse>=130||v.pulse<45))out.push({lvl:"warn",t:"Pulse is "+v.pulse+" per minute, which is outside the safe range. Get an ECG today."});
+  if(s("chest")&&(s("breath")||s("sweat")||s("nausea")||s("palp")))out.push({lvl:"crit",t:"Chest pain together with breathlessness, sweating, nausea or palpitations can be a heart attack. Call 108 now."});
+  else if(s("chest"))out.push({lvl:"warn",t:"Any chest pain needs an ECG. Do not wait if it lasts more than 10 minutes or spreads to the arm or jaw."});
+  if(s("conf"))out.push({lvl:"crit",t:"Confusion or drowsiness needs urgent evaluation. Check blood sugar immediately."});
+  if(s("legone")&&s("breath"))out.push({lvl:"crit",t:"A swollen leg with breathlessness can mean a clot has reached the lung. Call 108."});
+  if(s("yellow")&&(s("conf")||s("vomit")))out.push({lvl:"crit",t:"Yellow eyes with vomiting or drowsiness points to serious liver trouble. Go to hospital now."});
+  if(d.sev>=9)out.push({lvl:"warn",t:"Severity is rated "+d.sev+" of 10. Severe symptoms should be examined in person today."});
+  return out;
+}
+function scoreAll(d){
+  var res=[];
+  CONDITIONS.forEach(function(c){
+    var keys=Object.keys(c.sx);
+    var ws=keys.map(function(k){return c.sx[k]}).sort(function(a,b){return b-a}).slice(0,5);
+    var total=ws.reduce(function(a,b){return a+b},0);
+    var matchedKeys=keys.filter(function(k){return d.sel.indexOf(k)>-1});
+    var matched=matchedKeys.reduce(function(a,k){return a+c.sx[k]},0);
+    if(!matched)return;
+    var base=Math.min(1,matched/(total*0.8))*62;
+    var histHit=(c.hist||[]).filter(function(h){return d.hist.indexOf(h)>-1});
+    var histBonus=histHit.length?Math.min(24,16+(histHit.length-1)*4):0;
+    var vitHit=(c.vit||[]).filter(function(f){return d.flags.indexOf(f)>-1});
+    var vitBonus=Math.min(18,vitHit.length*9);
+    var medHit=(c.medKw||[]).filter(function(m){return d.meds.indexOf(m)>-1});
+    var medBonus=medHit.length?8:0;
+    var extra=0;
+    if(c.sexBoost&&d.p.sex===c.sexBoost)extra+=4;
+    if(c.ageBoost&&d.p.age!==null&&d.p.age>=c.ageBoost)extra+=4;
+    var explained=(matchedKeys.length/d.sel.length)*10;
+    var score=Math.min(97,Math.round(base+histBonus+vitBonus+medBonus+extra+explained));
+    res.push({c:c,score:score,matchedKeys:matchedKeys,histHit:histHit,vitHit:vitHit,medHit:medHit});
+  });
+  res.sort(function(a,b){return b.score-a.score});
+  return res.filter(function(r){return r.score>=28}).slice(0,6);
+}
+function crossCheck(d){
+  var rows=[],explained={};
+  d.hist.forEach(function(h){
+    var m=LINKS[h];if(!m)return;
+    d.sel.forEach(function(sx){
+      if(m[sx]){rows.push({h:lab(HISTORY,h),s:lab(SYMPTOMS,sx),t:m[sx]});explained[sx]=true}
+    });
+  });
+  var unexplained=d.sel.filter(function(x){return !explained[x]});
+  return {rows:rows,unexplained:unexplained};
+}
+function cautions(d,top){
+  var out=[],h=function(x){return d.hist.indexOf(x)>-1};
+  if(h("ckd")||h("ulcer")||h("heart")||h("htn")||h("asthma")){
+    out.push("Painkillers such as diclofenac, ibuprofen and aspirin-type NSAIDs can harm the kidneys, raise blood pressure, irritate the stomach or trigger asthma. This patient's history makes that more likely. Ask a doctor before using them.");
+  }
+  if(h("ckd")&&d.meds.indexOf("metformin")>-1)out.push("Metformin dose depends on kidney function. Ask the doctor to check eGFR.");
+  if(h("pregnant"))out.push("Pregnancy was selected. Many medicines listed here are not safe in pregnancy. Do not start any without an obstetrician's advice.");
+  if(d.p.age!==null&&d.p.age<12)out.push("For a child, doses depend on weight and age. Use only medicines and doses prescribed by a paediatrician.");
+  if(d.p.age!==null&&d.p.age>=65)out.push("Older adults are more sensitive to side effects such as low blood pressure and low sugar. Doses are often lower.");
+  if(d.allergiesRaw){
+    var toks=d.allergies.split(/[,;\n]| and /).map(function(t){return t.trim()}).filter(function(t){return t.length>3});
+    var hits={};
+    top.forEach(function(r){r.c.meds.forEach(function(m){
+      var txt=(m.c+" "+m.n).toLowerCase();
+      toks.forEach(function(t){if(txt.indexOf(t)>-1)hits[t]=(hits[t]||[]).concat([m.c])});
+    })});
+    Object.keys(hits).forEach(function(t){out.push("Reported allergy to "+t+". These options mention it: "+hits[t].join("; ")+". Tell the doctor before taking any of them.")});
+  }
+  return out;
+}
+
+/* ---------- rendering ---------- */
+function ul(items){return "<ul>"+items.map(function(i){return "<li>"+esc(i)+"</li>"}).join("")+"</ul>"}
+function dxHTML(r,i,d){
+  var c=r.c;
+  var tags='<span class="tag u-'+c.urg+'">'+URG[c.urg]+'</span>';
+  if(r.histHit.length)tags+='<span class="tag hist">History: '+esc(r.histHit.map(function(h){return lab(HISTORY,h)}).join(", "))+'</span>';
+  if(r.vitHit.length)tags+='<span class="tag">Reading fits</span>';
+  if(r.medHit.length)tags+='<span class="tag">Medicine link</span>';
+  var fit=[];
+  if(r.histHit.length)fit.push("Past "+r.histHit.map(function(h){return lab(HISTORY,h).toLowerCase()}).join(" and ")+" raises the chance of this condition.");
+  if(r.medHit.length)fit.push("Long-term use of "+r.medHit.join(", ")+" is a known contributor.");
+  if(r.vitHit.length)fit.push("The entered readings point the same way.");
+  var meds='<div class="tbl"><table><thead><tr><th>Option to discuss</th><th>What to know</th></tr></thead><tbody>'+
+    c.meds.map(function(m){return "<tr><td>"+esc(m.c)+"</td><td>"+esc(m.n)+"</td></tr>"}).join("")+"</tbody></table></div>";
+  return '<details class="dx"'+(i===0?" open":"")+'><summary><span class="rank">#'+(i+1)+'</span>'+
+    '<div class="dx-name"><h3>'+esc(c.name)+'</h3><div class="tags">'+tags+'</div></div>'+
+    '<div class="score"><div class="n">'+r.score+'<span class="fine"> / 100</span></div><div class="meter"><i style="width:'+r.score+'%"></i></div></div></summary>'+
+    '<div class="dx-body">'+
+    '<div><h4>Why this happens</h4><p>'+esc(c.why)+'</p></div>'+
+    '<div><h4>Symptoms that fit</h4><p>'+esc(r.matchedKeys.map(function(k){return lab(SYMPTOMS,k)}).join(", "))+'</p>'+(fit.length?'<p class="fine" style="margin-top:6px">'+esc(fit.join(" "))+'</p>':"")+'</div>'+
+    '<div class="cols"><div><h4>Tests to ask for</h4>'+ul(c.tests)+'</div><div><h4>Self-care</h4>'+ul(c.care)+'</div></div>'+
+    '<div><h4>Treatment options to discuss with a doctor</h4>'+meds+'<p class="fine" style="margin-top:6px">Names show the kind of medicine doctors use. Choice, dose and duration depend on age, weight, kidney and liver function, other medicines and pregnancy. A licensed doctor must prescribe.</p></div>'+
+    '<div><h4>When to get care</h4><p>'+esc(c.doc)+'</p></div>'+
+    '</div></details>';
+}
+function render(d){
+  var alerts=redFlags(d),top=scoreAll(d),cc=crossCheck(d),cau=cautions(d,top);
+  var h="";
+  var crit=alerts.filter(function(a){return a.lvl==="crit"}),warn=alerts.filter(function(a){return a.lvl==="warn"});
+  if(crit.length)h+='<div class="alert crit" role="alert"><h3>Possible emergency. Do not wait for this report.</h3><p style="margin-top:4px">Call 112 or ambulance 108, or go to the nearest hospital.</p><ul>'+crit.map(function(a){return "<li>"+esc(a.t)+"</li>"}).join("")+"</ul></div>";
+  if(warn.length)h+='<div class="alert warn"><h3>Warning signs found</h3><ul>'+warn.map(function(a){return "<li>"+esc(a.t)+"</li>"}).join("")+"</ul></div>";
+
+  var flagged=[];
+  if(d.flags.indexOf("glu_hi")>-1)flagged.push("Sugar "+d.v.glu);
+  if(d.flags.indexOf("glu_lo")>-1)flagged.push("Sugar "+d.v.glu);
+  if(d.flags.indexOf("bp_hi")>-1)flagged.push("BP "+(d.v.sys||"?")+"/"+(d.v.dia||"?"));
+  if(d.flags.indexOf("spo2_lo")>-1)flagged.push("SpO₂ "+d.v.spo2+"%");
+  if(d.flags.indexOf("pulse_hi")>-1)flagged.push("Pulse "+d.v.pulse);
+  if(d.flags.indexOf("temp_hi")>-1)flagged.push("Temp "+d.v.temp+"°F");
+  h+='<div class="panel"><div class="panel-head"><h2>Assessment</h2><p class="mono">'+esc(new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}))+'</p></div>'+
+    '<div class="summary">'+
+    '<div><div class="eyebrow">Patient</div><div class="v">'+esc(d.p.name)+'</div><div class="fine">'+esc(d.p.age+" years, "+d.p.sex)+(d.p.phone?" · "+esc(d.p.phone):"")+'</div></div>'+
+    '<div><div class="eyebrow">BMI</div><div class="v mono">'+(d.bmi?d.bmi.toFixed(1):"Not entered")+'</div><div class="fine">'+(d.bmi?bmiLabel(d.bmi)+" (Asian cut-offs)":"Add weight and height")+'</div></div>'+
+    '<div><div class="eyebrow">Symptoms</div><div class="v">'+d.sel.length+' for '+esc(DUR[d.dur])+'</div><div class="fine">Severity '+d.sev+' of 10</div></div>'+
+    '<div><div class="eyebrow">History</div><div class="v">'+(d.hist.length?esc(d.hist.map(function(x){return lab(HISTORY,x)}).join(", ")):"None selected")+'</div></div>'+
+    '<div><div class="eyebrow">Readings outside range</div><div class="v">'+(flagged.length?esc(flagged.join(", ")):"None")+'</div></div>'+
+    '</div>';
+
+  if(d.hist.length&&cc.rows.length){
+    h+='<div class="link-box"><h3>History cross-check</h3><p class="fine" style="margin-bottom:4px">Symptoms that past conditions are known to cause</p><ul>'+
+      cc.rows.map(function(r){return "<li><strong>"+esc(r.h)+" and "+esc(r.s.toLowerCase())+":</strong> "+esc(r.t)+"</li>"}).join("")+"</ul>"+
+      (cc.unexplained.length?'<p class="fine" style="margin-top:8px">Not explained by the listed history: '+esc(cc.unexplained.map(function(x){return lab(SYMPTOMS,x)}).join(", "))+'. These may point to a new or separate problem.</p>':"")+"</div>";
+  }else if(!d.hist.length){
+    h+='<div class="link-box"><h3>History cross-check</h3><p>No past conditions were selected, so symptoms were matched on their own. Adding history improves the result.</p></div>';
+  }else{
+    h+='<div class="link-box"><h3>History cross-check</h3><p>None of the selected symptoms are commonly caused by the listed past conditions. The causes below are treated as new problems.</p></div>';
+  }
+  if(d.extra.length)h+='<p class="fine" style="margin-bottom:10px">Picked up from the notes: '+esc(d.extra.map(function(x){return lab(SYMPTOMS,x)}).join(", "))+'.</p>';
+
+  h+='<h3 style="margin:6px 0 10px">Most likely causes</h3>';
+  if(top.length){
+    h+=top.map(function(r,i){return dxHTML(r,i,d)}).join("");
+    h+='<p class="fine" style="margin-top:10px">The score from 0 to 100 shows how well symptoms, history and readings match each condition. It is not a probability, and a high score is not a diagnosis.</p>';
+  }else{
+    h+='<p>The selected symptoms did not match any condition strongly. Add more symptoms or see a doctor for an examination.</p>';
+  }
+  h+='</div>';
+
+  /* reports */
+  var seen={},list=[];
+  top.slice(0,3).forEach(function(r){r.c.tests.forEach(function(t){
+    if(!seen[t]){seen[t]={n:t,f:[]};list.push(seen[t])}
+    seen[t].f.push(r.c.name);
+  })});
+  if(list.length){
+    h+='<div class="panel"><div class="panel-head"><h2>Reports to get</h2><p>Combined from the top three causes</p></div><div class="reports">'+
+      list.map(function(t){return "<div><b>"+esc(t.n)+"</b><span class=\"fine\">For: "+esc(t.f.map(function(x){return x.replace(/\s*\(.*\)/,"")}).join("; "))+"</span></div>"}).join("")+"</div></div>";
+  }
+  if(cau.length){
+    h+='<div class="panel"><div class="panel-head"><h2>Medicine cautions for this patient</h2></div>'+ul(cau)+"</div>";
+  }
+  h+='<div class="panel"><p class="fine">This report is generated from a fixed rule set for education and triage support. It cannot see, examine or test the patient, may miss serious conditions, and is not medical advice. Do not start, stop or change any medicine because of it. Take it to a registered doctor.</p></div>';
+  $("results").innerHTML=h;
+
+  /* plain-text copy */
+  var L=[];
+  L.push("SYMPTOM CHART REPORT  "+new Date().toLocaleDateString("en-IN"));
+  L.push("Patient: "+d.p.name+", "+d.p.age+" y, "+d.p.sex+(d.p.phone?", "+d.p.phone:"")+(d.p.city?", "+d.p.city:""));
+  if(d.bmi)L.push("BMI: "+d.bmi.toFixed(1)+" ("+bmiLabel(d.bmi)+")");
+  L.push("Symptoms ("+DUR[d.dur]+", severity "+d.sev+"/10): "+d.sel.map(function(x){return lab(SYMPTOMS,x)}).join(", "));
+  L.push("History: "+(d.hist.length?d.hist.map(function(x){return lab(HISTORY,x)}).join(", "):"none selected"));
+  if(d.medsRaw)L.push("Current medicines: "+d.medsRaw);
+  if(d.allergiesRaw)L.push("Allergies: "+d.allergiesRaw);
+  if(alerts.length){L.push("");L.push("WARNINGS");alerts.forEach(function(a){L.push("- "+a.t)})}
+  L.push("");L.push("LIKELY CAUSES");
+  top.forEach(function(r,i){
+    L.push((i+1)+". "+r.c.name+" (match "+r.score+"/100, "+URG[r.c.urg]+")");
+    L.push("   Why: "+r.c.why);
+    L.push("   Tests: "+r.c.tests.join("; "));
+    L.push("   Options to discuss: "+r.c.meds.map(function(m){return m.c}).join("; "));
+    L.push("   When to get care: "+r.c.doc);
+  });
+  L.push("");L.push("Generated from a fixed rule set. Not a diagnosis or prescription. See a registered doctor.");
+  lastText=L.join("\n");
+}
+
+/* ---------- wiring ---------- */
+buildChips();
+loadSample();
+document.addEventListener("change",function(e){
+  if(e.target.name==="sym"||e.target.name==="hist"){counts();filterSyms()}
+});
+$("symSearch").addEventListener("input",filterSyms);
+$("severity").addEventListener("input",function(){$("sevOut").textContent=this.value});
+$("patientForm").addEventListener("submit",function(e){
+  e.preventDefault();
+  if(!validate()){toast("Fix the highlighted fields");return}
+  $("who").textContent=$("pName").value.trim()+" · "+$("pAge").value+" y · "+$("pSex").value;
+  go(2);
+});
+$("back1").addEventListener("click",function(){go(1)});
+$("back2").addEventListener("click",function(){go(2)});
+$("analyze").addEventListener("click",function(){
+  var d=gather();
+  if(!d.sel.length){toast("Select at least one symptom");return}
+  render(d);go(3);
+});
+$("clearBtn").addEventListener("click",function(){clearAll();toast("Form cleared")});
+$("newBtn").addEventListener("click",function(){clearAll();$("results").innerHTML="";go(1)});
+$("copyBtn").addEventListener("click",function(){
+  function fallback(){
+    var old=$("copyFallback");if(old)old.remove();
+    var ta=document.createElement("textarea");ta.id="copyFallback";ta.readOnly=true;ta.value=lastText;ta.style.cssText="margin-top:14px;min-height:220px";
+    $("step3").appendChild(ta);ta.focus();ta.select();toast("Select and copy the text below");
+  }
+  try{
+    navigator.clipboard.writeText(lastText).then(function(){toast("Report copied")},fallback);
+  }catch(err){fallback()}
+});
+Array.prototype.forEach.call(FIELDS,function(k){
+  $(k).addEventListener("input",function(){$("sampleBar").hidden=true});
+});
+})();
+</script>
+
+</body></html>
